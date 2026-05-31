@@ -7,22 +7,25 @@ const BREAK_MINS = 5
 const FOCUS_MS = FOCUS_MINS * 60 * 1000
 const BREAK_MS = BREAK_MINS * 60 * 1000
 
-const BG_PRESETS = [
-  { label: 'Void', value: '#0a0014' },
-  { label: 'Deep Sea', value: 'linear-gradient(135deg,#001428,#002244)' },
-  { label: 'Aurora', value: 'linear-gradient(135deg,#0a0014,#0d1a2e,#001a0a)' },
-  { label: 'Ember', value: 'linear-gradient(135deg,#1a0000,#2a0a00)' },
-  { label: 'Dusk', value: 'linear-gradient(135deg,#0a001a,#1a0033,#000d1a)' },
+const GRADIENT_PRESETS = [
+  { label: 'Night', value: 'linear-gradient(145deg,#0d0d14,#12101e)' },
+  { label: 'Ocean', value: 'linear-gradient(145deg,#0a1628,#0d2240)' },
+  { label: 'Forest', value: 'linear-gradient(145deg,#0a1a0f,#0d2818)' },
+  { label: 'Dusk',  value: 'linear-gradient(145deg,#1a0f28,#120a1e)' },
+  { label: 'Ember', value: 'linear-gradient(145deg,#1a0f0a,#280d08)' },
 ]
 
-function loadState() {
-  try {
-    return JSON.parse(localStorage.getItem('focusTimer') || 'null')
-  } catch {
-    return null
-  }
-}
+const PHOTO_PRESETS = [
+  { label: 'Sunset', src: './wallpapers/sunset.jpg' },
+  { label: 'Field',  src: './wallpapers/field.jpg' },
+  { label: 'Ship',   src: './wallpapers/ship.jpg' },
+]
 
+const LS_BG_KEY = 'focusTimer_bgImage'
+
+function loadState() {
+  try { return JSON.parse(localStorage.getItem('focusTimer') || 'null') } catch { return null }
+}
 function saveState(s) {
   localStorage.setItem('focusTimer', JSON.stringify(s))
 }
@@ -40,27 +43,24 @@ export default function Timer() {
   const [newSubject, setNewSubject] = useState('')
   const [showAddSubject, setShowAddSubject] = useState(false)
 
-  // timer state
-  const [mode, setMode] = useState('focus') // 'focus' | 'break'
+  const [mode, setMode] = useState('focus')
   const [running, setRunning] = useState(false)
   const [remainingMs, setRemainingMs] = useState(FOCUS_MS)
-  const [endTime, setEndTime] = useState(null) // epoch ms when timer ends
+  const [endTime, setEndTime] = useState(null)
 
-  const [bg, setBg] = useState(BG_PRESETS[0].value)
-  const [bgImage, setBgImage] = useState(null)
-  const [notification, setNotification] = useState(null) // { msg, type }
+  // bg: gradient string or photo preset src (starts with './')
+  const [bg, setBg] = useState(GRADIENT_PRESETS[0].value)
+  // customBg: base64 data URL for user-uploaded photo
+  const [customBg, setCustomBg] = useState(null)
 
+  const [notification, setNotification] = useState(null)
   const intervalRef = useRef(null)
-  const audioRef = useRef(null)
 
   const totalMs = mode === 'focus' ? FOCUS_MS : BREAK_MS
   const progress = 1 - remainingMs / totalMs
-
-  // circle math
   const R = 120
   const CIRC = 2 * Math.PI * R
 
-  // load subjects
   useEffect(() => {
     api.getSubjects().then(setSubjects).catch(console.error)
   }, [])
@@ -68,22 +68,21 @@ export default function Timer() {
   // restore from localStorage
   useEffect(() => {
     const saved = loadState()
-    if (!saved) return
-    setMode(saved.mode || 'focus')
-    setSelectedSubject(saved.selectedSubject || '')
-    setBg(saved.bg || BG_PRESETS[0].value)
-    if (saved.running && saved.endTime) {
-      const left = saved.endTime - Date.now()
-      if (left > 0) {
-        setEndTime(saved.endTime)
-        setRemainingMs(left)
-        setRunning(true)
+    if (saved) {
+      setMode(saved.mode || 'focus')
+      setSelectedSubject(saved.selectedSubject || '')
+      setBg(saved.bg || GRADIENT_PRESETS[0].value)
+      if (saved.running && saved.endTime) {
+        const left = saved.endTime - Date.now()
+        if (left > 0) { setEndTime(saved.endTime); setRemainingMs(left); setRunning(true) }
+        else { setRemainingMs(0) }
       } else {
-        setRemainingMs(0)
+        setRemainingMs(saved.remainingMs ?? FOCUS_MS)
       }
-    } else {
-      setRemainingMs(saved.remainingMs ?? (saved.mode === 'break' ? BREAK_MS : FOCUS_MS))
     }
+    // restore custom uploaded photo
+    const saved64 = localStorage.getItem(LS_BG_KEY)
+    if (saved64) setCustomBg(saved64)
   }, [])
 
   // tick
@@ -93,29 +92,19 @@ export default function Timer() {
         const left = endTime - Date.now()
         if (left <= 0) {
           clearInterval(intervalRef.current)
-          setRemainingMs(0)
-          setRunning(false)
-          handleTimerEnd()
-        } else {
-          setRemainingMs(left)
-        }
+          setRemainingMs(0); setRunning(false); handleTimerEnd()
+        } else { setRemainingMs(left) }
       }, 250)
-    } else {
-      clearInterval(intervalRef.current)
-    }
+    } else { clearInterval(intervalRef.current) }
     return () => clearInterval(intervalRef.current)
   }, [running, endTime])
 
-  // update tab title
   useEffect(() => {
-    if (running) {
-      document.title = `${formatTime(remainingMs)} — ${mode === 'focus' ? '🎯 Focus' : '☕ Break'}`
-    } else {
-      document.title = 'Focus Timer'
-    }
+    document.title = running
+      ? `${formatTime(remainingMs)} — ${mode === 'focus' ? '🎯 Focus' : '☕ Break'}`
+      : 'Focus Timer'
   }, [running, remainingMs, mode])
 
-  // persist state
   useEffect(() => {
     saveState({ mode, running, endTime, remainingMs, selectedSubject, bg })
   }, [mode, running, endTime, remainingMs, selectedSubject, bg])
@@ -123,28 +112,19 @@ export default function Timer() {
   const handleTimerEnd = useCallback(async () => {
     playBeep()
     if (mode === 'focus') {
-      showNotif('🎯 Focus session complete! Great work.', 'success')
+      showNotif('Focus session complete!', 'success')
       if (selectedSubject) {
-        try {
-          await api.createSession(parseInt(selectedSubject), FOCUS_MINS)
-        } catch (e) {
-          console.error(e)
-        }
+        try { await api.createSession(parseInt(selectedSubject), FOCUS_MINS) } catch (e) { console.error(e) }
       }
-      // auto-start break
       setTimeout(() => {
         setMode('break')
         const et = Date.now() + BREAK_MS
-        setEndTime(et)
-        setRemainingMs(BREAK_MS)
-        setRunning(true)
-        showNotif('☕ Break time! 5 minutes.', 'info')
+        setEndTime(et); setRemainingMs(BREAK_MS); setRunning(true)
+        showNotif('Break time — 5 minutes.', 'info')
       }, 1500)
     } else {
-      showNotif('☕ Break over! Ready to focus?', 'info')
-      setMode('focus')
-      setRemainingMs(FOCUS_MS)
-      setEndTime(null)
+      showNotif('Break over! Ready to focus?', 'info')
+      setMode('focus'); setRemainingMs(FOCUS_MS); setEndTime(null)
     }
   }, [mode, selectedSubject])
 
@@ -154,8 +134,7 @@ export default function Timer() {
       for (let i = 0; i < 3; i++) {
         const osc = ctx.createOscillator()
         const gain = ctx.createGain()
-        osc.connect(gain)
-        gain.connect(ctx.destination)
+        osc.connect(gain); gain.connect(ctx.destination)
         osc.frequency.value = 880
         gain.gain.setValueAtTime(0.3, ctx.currentTime + i * 0.35)
         gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.35 + 0.3)
@@ -163,11 +142,8 @@ export default function Timer() {
         osc.stop(ctx.currentTime + i * 0.35 + 0.3)
       }
     } catch (_) {}
-    // browser notification
     if (Notification.permission === 'granted') {
-      new Notification('Focus Timer', {
-        body: mode === 'focus' ? 'Focus session complete!' : 'Break time over!',
-      })
+      new Notification('Focus Timer', { body: mode === 'focus' ? 'Session complete!' : 'Break over!' })
     }
   }
 
@@ -177,26 +153,15 @@ export default function Timer() {
   }
 
   function handleStart() {
-    if (!selectedSubject && mode === 'focus') {
-      showNotif('Select a subject first!', 'warn')
-      return
-    }
+    if (!selectedSubject && mode === 'focus') { showNotif('Select a subject first!', 'warn'); return }
     if (Notification.permission === 'default') Notification.requestPermission()
-    const et = Date.now() + remainingMs
-    setEndTime(et)
-    setRunning(true)
+    setEndTime(Date.now() + remainingMs); setRunning(true)
   }
 
-  function handlePause() {
-    setRunning(false)
-    setEndTime(null)
-  }
+  function handlePause() { setRunning(false); setEndTime(null) }
 
   function handleReset() {
-    setRunning(false)
-    setEndTime(null)
-    setMode('focus')
-    setRemainingMs(FOCUS_MS)
+    setRunning(false); setEndTime(null); setMode('focus'); setRemainingMs(FOCUS_MS)
   }
 
   async function handleAddSubject(e) {
@@ -205,12 +170,8 @@ export default function Timer() {
     try {
       const s = await api.createSubject(newSubject.trim())
       setSubjects(prev => [...prev, s])
-      setSelectedSubject(String(s.id))
-      setNewSubject('')
-      setShowAddSubject(false)
-    } catch (e) {
-      showNotif(e.message, 'warn')
-    }
+      setSelectedSubject(String(s.id)); setNewSubject(''); setShowAddSubject(false)
+    } catch (e) { showNotif(e.message, 'warn') }
   }
 
   async function handleDeleteSubject(id) {
@@ -219,34 +180,60 @@ export default function Timer() {
     if (selectedSubject === String(id)) setSelectedSubject('')
   }
 
-  function handleBgImage(e) {
+  function handleBgUpload(e) {
     const file = e.target.files[0]
     if (!file) return
-    const url = URL.createObjectURL(file)
-    setBgImage(url)
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      const data64 = ev.target.result
+      try {
+        localStorage.setItem(LS_BG_KEY, data64)
+      } catch (_) {
+        showNotif('Image too large to save. Showing temporarily.', 'warn')
+      }
+      setCustomBg(data64)
+      setBg('')
+    }
+    reader.readAsDataURL(file)
   }
 
-  const bgStyle = bgImage
-    ? { backgroundImage: `url(${bgImage})`, backgroundSize: 'cover', backgroundPosition: 'center' }
-    : bg.startsWith('linear') || bg.startsWith('radial')
-      ? { background: bg }
-      : { backgroundColor: bg }
+  function handleRemoveCustomBg() {
+    localStorage.removeItem(LS_BG_KEY)
+    setCustomBg(null)
+    setBg(GRADIENT_PRESETS[0].value)
+  }
+
+  function selectPhotoBg(src) {
+    setCustomBg(null)
+    localStorage.removeItem(LS_BG_KEY)
+    setBg(src)
+  }
+
+  function selectGradient(value) {
+    setCustomBg(null)
+    localStorage.removeItem(LS_BG_KEY)
+    setBg(value)
+  }
+
+  const bgStyle = customBg
+    ? { backgroundImage: `url(${customBg})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+    : bg.startsWith('./')
+      ? { backgroundImage: `url(${bg})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+      : { background: bg }
 
   const dashoffset = CIRC * (1 - progress)
-  const ringColor = mode === 'focus' ? 'var(--cyan)' : 'var(--lime)'
+  const ringColor = mode === 'focus' ? '#6c8ef5' : '#4ade80'
 
   return (
     <div className="timer-root" style={bgStyle}>
       <div className="timer-overlay" />
 
       {notification && (
-        <div className={`timer-notif timer-notif--${notification.type}`}>
-          {notification.msg}
-        </div>
+        <div className={`timer-notif timer-notif--${notification.type}`}>{notification.msg}</div>
       )}
 
       <div className="timer-layout">
-        {/* ── Left: Timer ───────────────────────────── */}
+        {/* ── Left: Timer ── */}
         <div className="timer-left">
           <div className="timer-mode-badge" data-mode={mode}>
             {mode === 'focus' ? '🎯 Focus' : '☕ Break'}
@@ -258,11 +245,7 @@ export default function Timer() {
               <circle
                 cx="140" cy="140" r={R}
                 className="timer-progress"
-                style={{
-                  strokeDasharray: CIRC,
-                  strokeDashoffset: dashoffset,
-                  stroke: ringColor,
-                }}
+                style={{ strokeDasharray: CIRC, strokeDashoffset: dashoffset, stroke: ringColor }}
               />
             </svg>
             <div className="timer-display">
@@ -272,87 +255,85 @@ export default function Timer() {
           </div>
 
           <div className="timer-controls">
-            {!running ? (
-              <button className="btn btn-lg btn-cyan" onClick={handleStart}>
-                ▶ {remainingMs === (mode === 'focus' ? FOCUS_MS : BREAK_MS) ? 'Start' : 'Resume'}
-              </button>
-            ) : (
-              <button className="btn btn-lg btn-pink" onClick={handlePause}>⏸ Pause</button>
-            )}
-            <button className="btn btn-ghost" onClick={handleReset}>↺ Reset</button>
+            {!running
+              ? <button className="btn btn-lg btn-primary" onClick={handleStart}>
+                  {remainingMs === (mode === 'focus' ? FOCUS_MS : BREAK_MS) ? 'Start' : 'Resume'}
+                </button>
+              : <button className="btn btn-lg btn-glass" onClick={handlePause}>Pause</button>
+            }
+            <button className="btn btn-glass btn-sm" onClick={handleReset}>Reset</button>
           </div>
         </div>
 
-        {/* ── Right: Subject + BG ───────────────────── */}
+        {/* ── Right: Subject + BG ── */}
         <div className="timer-right">
-          {/* Subject selector */}
+          {/* Subject */}
           <div className="card timer-subject-card">
             <div className="timer-section-title">Subject</div>
-            <select
-              className="select"
-              value={selectedSubject}
-              onChange={e => setSelectedSubject(e.target.value)}
-              disabled={running}
-            >
+            <select className="select" value={selectedSubject} onChange={e => setSelectedSubject(e.target.value)} disabled={running}>
               <option value="">— Select subject —</option>
-              {subjects.map(s => (
-                <option key={s.id} value={s.id}>{s.name}</option>
-              ))}
+              {subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
 
             <div className="subject-list">
               {subjects.map(s => (
                 <div key={s.id} className="subject-item">
                   <span>{s.name}</span>
-                  <button
-                    className="btn btn-sm btn-ghost"
-                    onClick={() => handleDeleteSubject(s.id)}
-                    title="Delete subject"
-                  >✕</button>
+                  <button className="btn btn-sm btn-danger" onClick={() => handleDeleteSubject(s.id)}>✕</button>
                 </div>
               ))}
             </div>
 
             {showAddSubject ? (
               <form className="subject-add-form" onSubmit={handleAddSubject}>
-                <input
-                  className="input"
-                  value={newSubject}
-                  onChange={e => setNewSubject(e.target.value)}
-                  placeholder="New subject name..."
-                  autoFocus
-                />
+                <input className="input" value={newSubject} onChange={e => setNewSubject(e.target.value)} placeholder="Subject name..." autoFocus />
                 <div style={{ display: 'flex', gap: 8 }}>
-                  <button type="submit" className="btn btn-sm btn-cyan">Add</button>
-                  <button type="button" className="btn btn-sm btn-ghost" onClick={() => setShowAddSubject(false)}>Cancel</button>
+                  <button type="submit" className="btn btn-sm btn-primary">Add</button>
+                  <button type="button" className="btn btn-sm btn-glass" onClick={() => setShowAddSubject(false)}>Cancel</button>
                 </div>
               </form>
             ) : (
-              <button className="btn btn-sm btn-ghost" onClick={() => setShowAddSubject(true)}>+ Add Subject</button>
+              <button className="btn btn-sm btn-glass" onClick={() => setShowAddSubject(true)}>+ Add Subject</button>
             )}
           </div>
 
-          {/* Background picker */}
+          {/* Background */}
           <div className="card">
             <div className="timer-section-title">Background</div>
-            <div className="bg-presets">
-              {BG_PRESETS.map(p => (
+
+            <div className="bg-section-label">Photos</div>
+            <div className="bg-photo-presets">
+              {PHOTO_PRESETS.map(p => (
                 <button
                   key={p.label}
-                  className={'bg-swatch' + (bg === p.value && !bgImage ? ' active' : '')}
-                  style={p.value.startsWith('linear') ? { background: p.value } : { backgroundColor: p.value }}
-                  onClick={() => { setBg(p.value); setBgImage(null) }}
+                  className={'bg-photo-thumb' + (bg === p.src && !customBg ? ' active' : '')}
+                  style={{ backgroundImage: `url(${p.src})` }}
+                  onClick={() => selectPhotoBg(p.src)}
                   title={p.label}
                 />
               ))}
             </div>
-            <label className="btn btn-sm btn-ghost" style={{ width: '100%', marginTop: 10, cursor: 'pointer' }}>
+
+            <div className="bg-section-label" style={{ marginTop: 12 }}>Colors</div>
+            <div className="bg-presets">
+              {GRADIENT_PRESETS.map(p => (
+                <button
+                  key={p.label}
+                  className={'bg-swatch' + (bg === p.value && !customBg ? ' active' : '')}
+                  style={{ background: p.value }}
+                  onClick={() => selectGradient(p.value)}
+                  title={p.label}
+                />
+              ))}
+            </div>
+
+            <label className="btn btn-sm btn-glass" style={{ width: '100%', marginTop: 12, cursor: 'pointer' }}>
               📷 Upload Photo
-              <input type="file" accept="image/*" style={{ display: 'none' }} onChange={handleBgImage} />
+              <input type="file" accept="image/*" style={{ display: 'none' }} onChange={handleBgUpload} />
             </label>
-            {bgImage && (
-              <button className="btn btn-sm btn-ghost" style={{ width: '100%', marginTop: 6 }} onClick={() => setBgImage(null)}>
-                ✕ Remove Photo
+            {customBg && (
+              <button className="btn btn-sm btn-glass" style={{ width: '100%', marginTop: 6 }} onClick={handleRemoveCustomBg}>
+                ✕ Remove Uploaded Photo
               </button>
             )}
           </div>
