@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "homepage": ".",
+  "homepage": "https://hyrocket.github.io/nomadcoders-ai-funderamantals-20260531-focus-timer",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
