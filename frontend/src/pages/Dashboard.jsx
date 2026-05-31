@@ -47,8 +47,8 @@ export default function Dashboard() {
   const m = Math.round((totalHours - h) * 60)
 
   return (
-    <div className="page">
-      <h1 className="page-title">Dashboard</h1>
+    <div>
+      <h1 className="panel-title">Dashboard</h1>
 
       {/* Stat chips */}
       <div className="dash-stats">

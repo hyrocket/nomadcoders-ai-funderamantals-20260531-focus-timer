@@ -10,8 +10,7 @@
 .timer-overlay {
   position: absolute;
   inset: 0;
-  background: rgba(10, 10, 18, 0.45);
-  backdrop-filter: blur(4px);
+  background: rgba(0, 0, 0, 0.18);
   pointer-events: none;
 }
 
@@ -107,7 +106,7 @@
 
 .timer-track {
   fill: none;
-  stroke: rgba(255,255,255,0.06);
+  stroke: rgba(255,255,255,0.15);
   stroke-width: 5;
 }
 

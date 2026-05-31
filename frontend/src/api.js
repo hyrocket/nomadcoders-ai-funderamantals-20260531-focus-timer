@@ -23,4 +23,5 @@ export const api = {
   deleteSession: (id) => req('DELETE', `/sessions/${id}`),
 
   getStats: () => req('GET', '/stats'),
+  resetAll: () => req('POST', '/reset'),
 }

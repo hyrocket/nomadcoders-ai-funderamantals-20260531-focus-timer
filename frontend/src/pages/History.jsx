@@ -53,8 +53,8 @@ export default function History() {
   }, {})
 
   return (
-    <div className="page">
-      <h1 className="page-title">History</h1>
+    <div>
+      <h1 className="panel-title">History</h1>
 
       {/* Filters */}
       <div className="history-filters card">

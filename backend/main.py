@@ -204,6 +204,21 @@ def get_stats():
     })
 
 
+# ── Reset ─────────────────────────────────────────────────────
+
+@app.route("/reset", methods=["POST"])
+def reset_all():
+    conn = get_db()
+    conn.executescript("""
+        DELETE FROM sessions;
+        DELETE FROM subjects;
+        INSERT OR IGNORE INTO subjects (name) VALUES ('Work'), ('Reading'), ('Exercise'), ('Study');
+    """)
+    conn.commit()
+    conn.close()
+    return jsonify({"success": True})
+
+
 if __name__ == "__main__":
     init_db()
     app.run(debug=True)
